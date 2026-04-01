@@ -5,7 +5,7 @@ import asyncio
 IS_WEB = sys.platform == "emscripten"
 
 class Game3D2048:
-    def __init__(self, size_x=4, size_y=4, size_z=2):
+    def __init__(self, size_x=3, size_y=3, size_z=2):
         self.size_x = size_x
         self.size_y = size_y
         self.size_z = size_z
@@ -165,7 +165,7 @@ import math
 # --- Pygame UI Constants ---
 SCREEN_WIDTH = 1010
 SCREEN_HEIGHT = 600
-GRID_SIZE = 4
+GRID_SIZE = 3
 TILE_SIZE = 60
 GRID_MARGIN = 10
 GRID_WIDTH = GRID_HEIGHT = GRID_SIZE * TILE_SIZE + (GRID_SIZE + 1) * GRID_MARGIN
