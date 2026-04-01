@@ -19,15 +19,23 @@ python3 -m pip install -r requirements.txt
 The generated static site is expected at `build/web`.
 The build script stages source files into `.webbuild_src` and excludes local folders like `.venv`.
 
-## Local preview (correct runtime server)
+## Local preview (same files as GitHub Pages)
 
-`pygbag` apps should be served by `pygbag` for local testing, not plain `http.server`.
+To debug the exact artifact that GitHub Pages deploys, build first and then serve `build/web` locally.
+
+```zsh
+python3 -m pip install -r requirements.txt
+/Users/wuminghan/Documents/trae_projects/3D2048/.venv/bin/python scripts/build_web.py
+python3 scripts/serve_web.py
+```
+
+Then open: `http://127.0.0.1:8000`
+
+If you want to inspect raw `pygbag` output before the project-specific post-processing, you can still run:
 
 ```zsh
 /Users/wuminghan/Documents/trae_projects/3D2048/.venv/bin/python -m pygbag .webbuild_src
 ```
-
-Then open: `http://localhost:8000`
 
 ## Deploy to GitHub Pages
 

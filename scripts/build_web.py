@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 import sys
@@ -36,96 +35,60 @@ def should_ignore(directory: str, names: list[str]) -> set[str]:
     return ignored
 
 
-def replace_once(contents: str, old: str, new: str) -> str:
-    if old not in contents:
-        raise RuntimeError(f"Expected snippet not found in generated web index: {old[:40]!r}")
-    return contents.replace(old, new, 1)
-
-
 def customize_web_loader(index_path: Path) -> None:
     contents = index_path.read_text(encoding="utf-8")
 
-    bootstrap_src = '<script src="https://pygame-web.github.io/cdn/0.9.3/pythons.js" type=module id="site" data-python="python3.12" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui" async defer>'
-    bootstrap_src_no_async = '<script src="https://pygame-web.github.io/cdn/0.9.3/pythons.js" type=module id="site" data-python="python3.12" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui">'
-    browserfs_script = '<script src="https://pygame-web.github.io/cdn/0.9.3//browserfs.min.js"></script>'
-    bootstrap_with_browserfs = browserfs_script + bootstrap_src_no_async
-
-    if bootstrap_src in contents:
-        contents = contents.replace(bootstrap_src, bootstrap_with_browserfs, 1)
-    elif bootstrap_src_no_async in contents and browserfs_script not in contents.split(bootstrap_src_no_async, 1)[0]:
-        contents = contents.replace(bootstrap_src_no_async, bootstrap_with_browserfs, 1)
-
-    if browserfs_script in contents:
-        first_browserfs_index = contents.find(browserfs_script)
-        second_browserfs_index = contents.find(browserfs_script, first_browserfs_index + len(browserfs_script))
-        if second_browserfs_index != -1:
-            contents = contents[:second_browserfs_index] + contents[second_browserfs_index + len(browserfs_script):]
-
-    if 'platform.document.body.style.background = "#7f7f7f"' in contents:
-        contents = contents.replace(
-            'platform.document.body.style.background = "#7f7f7f"',
-            'platform.document.body.style.background = "#faf8ef"',
-            1,
-        )
-
-    if "platform.window.transfer.hidden = false" in contents:
-        contents = contents.replace(
-            "platform.window.transfer.hidden = false",
-            "platform.window.transfer.hidden = true",
-            1,
-        )
-
-    contents = re.sub(
-        r"""[ \t]*# TODO: test for window\.webkitAudioContext.*?await asyncio\.sleep\(\.1\)\n\n""",
+    contents = contents.replace(f'"{HIDDEN_BUNDLE_NAME}.apk"', f'"{PUBLIC_BUNDLE_NAME}.apk"')
+    contents = contents.replace(f'"{HIDDEN_BUNDLE_NAME}.tar.gz"', f'"{PUBLIC_BUNDLE_NAME}.tar.gz"')
+    contents = contents.replace(
+        '    overlay = platform.document.getElementById("loading-overlay")\n'
+        '    if overlay:\n'
+        '        overlay.style.display = "none"\n',
         "",
-        contents,
-        count=1,
-        flags=re.DOTALL,
+    )
+    contents = contents.replace(
+        '        #loading-overlay {\n'
+        '            position: fixed;\n'
+        '            inset: 0;\n'
+        '            display: flex;\n'
+        '            align-items: center;\n'
+        '            justify-content: center;\n'
+        '            background: rgba(250, 248, 239, 0.92);\n'
+        '            pointer-events: none;\n'
+        '            z-index: 1000001;\n'
+        '        }\n'
+        '\n'
+        '        #loading-spinner {\n'
+        '            width: 64px;\n'
+        '            height: 64px;\n'
+        '            border: 7px solid rgba(119, 110, 101, 0.18);\n'
+        '            border-top-color: #776e65;\n'
+        '            border-radius: 50%;\n'
+        '            animation: loading-spinner-rotate 0.8s linear infinite;\n'
+        '        }\n'
+        '\n'
+        '        @keyframes loading-spinner-rotate {\n'
+        '            to {\n'
+        '                transform: rotate(360deg);\n'
+        '            }\n'
+        '        }\n'
+        '\n',
+        "",
+    )
+    contents = contents.replace('    <div id="loading-overlay"><div id="loading-spinner" aria-hidden="true"></div></div>\n\n', "")
+
+    contents = contents.replace(
+        '    platform.document.body.style.background = "#7f7f7f"',
+        '    platform.document.body.style.background = "#faf8ef"',
+    )
+    contents = contents.replace(
+        '    platform.window.infobox.style.display = "none"\n',
+        '    platform.window.transfer.hidden = true\n'
+        '    platform.window.transfer.style.display = "none"\n'
+        '    platform.window.infobox.style.display = "none"\n',
     )
 
-    contents = contents.replace("        platform.window.show_infobox()\n", "")
-
-    if "platform.window.transfer.hidden = true\n    platform.window.infobox.style.display = \"none\"" not in contents:
-        contents = contents.replace(
-            '    platform.window.infobox.style.display = "none"\n',
-            '    platform.window.transfer.hidden = true\n    platform.window.infobox.style.display = "none"\n',
-            1,
-        )
-
-    if "ume_block : 1" in contents:
-        contents = contents.replace("ume_block : 1", "ume_block : 0", 1)
-
-    show_infobox_default = """function show_infobox() {
-    infobox.style.display = "block";
-
-    // Measure box
-    const w = infobox.offsetWidth;
-    const h = infobox.offsetHeight;
-
-    // Center in viewport
-    const left = (window.innerWidth - w) / 2;
-    const top = (window.innerHeight - h) / 2;
-
-    infobox.style.left = left + "px";
-    infobox.style.top = top + "px";
-}
-"""
-    show_infobox_custom = """function show_infobox() {
-    infobox.style.display = "none";
-}
-"""
-    if show_infobox_default in contents:
-        contents = contents.replace(show_infobox_default, show_infobox_custom, 1)
-    elif "function show_infobox() {" in contents:
-        contents = re.sub(
-            r"""function show_infobox\(\) \{.*?\n\}\n""",
-            show_infobox_custom,
-            contents,
-            count=1,
-            flags=re.DOTALL,
-        )
-
-    default_style = """        #status {
+    default_loader_style = """        #status {
             display: inline-block;
             vertical-align: top;
             margin-top: 20px;
@@ -149,122 +112,116 @@ def customize_web_loader(index_path: Path) -> None:
             z-index: 999999;
         }
 """
-    custom_style = """        #transfer {
+    themed_loader_style = """        #transfer {
             position: fixed;
             inset: 0;
             display: flex;
             flex-direction: column;
-            gap: 18px;
             align-items: center;
             justify-content: center;
+            gap: 16px;
+            background:
+                radial-gradient(circle at top, rgba(250, 248, 239, 0.95), rgba(250, 248, 239, 0.88) 32%, rgba(187, 173, 160, 0.98) 100%);
+            z-index: 999998;
+        }
+
+        #transfer::before {
+            content: "3D 2048";
+            display: block;
+            padding: 18px 28px;
+            border-radius: 18px;
             background: #faf8ef;
-            z-index: 20;
-        }
-
-        #transfer .loading-title {
-            font-size: 32px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
             color: #776e65;
+            font-size: 42px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            box-shadow: 0 16px 40px rgba(119, 110, 101, 0.18);
         }
 
-        #transfer .spinner {
-            width: 72px;
-            height: 72px;
+        .spinner {
+            width: 64px;
+            height: 64px;
             border: 7px solid rgba(119, 110, 101, 0.18);
-            border-top-color: #776e65;
+            border-top-color: #8f7a66;
             border-radius: 50%;
-            animation: spinner-rotate 0.8s linear infinite;
+            animation: loader-spin 0.8s linear infinite;
+            box-shadow: 0 10px 24px rgba(119, 110, 101, 0.12);
         }
 
-        @keyframes spinner-rotate {
+        @keyframes loader-spin {
             to {
                 transform: rotate(360deg);
             }
         }
 
         #status {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
+            margin: 0;
+            font-weight: 700;
+            font-size: 22px;
+            letter-spacing: 0.08em;
+            color: #776e65;
+            text-transform: uppercase;
         }
 
         #progress {
-            display: none;
+            width: 260px;
+            height: 12px;
+            border: 0;
+            border-radius: 999px;
+            overflow: hidden;
+            accent-color: #8f7a66;
+        }
+
+        #progress::-webkit-progress-bar {
+            background: rgba(205, 193, 180, 0.9);
+            border-radius: 999px;
+        }
+
+        #progress::-webkit-progress-value {
+            background: linear-gradient(90deg, #8f7a66, #bbada0);
+            border-radius: 999px;
+        }
+
+        #progress::-moz-progress-bar {
+            background: linear-gradient(90deg, #8f7a66, #bbada0);
+            border-radius: 999px;
         }
 
         #infobox {
             position: fixed;
-            background: transparent;
+            background: #faf8ef;
             color: #776e65;
-            font-weight: 600;
-            padding: 0;
-            z-index: 21;
-            display: none;
+            font-weight: 700;
+            font-size: 20px;
+            text-align: center;
+            border: 2px solid #bbada0;
+            border-radius: 18px;
+            padding: 16px 28px;
+            box-shadow: 0 16px 40px rgba(119, 110, 101, 0.18);
+            z-index: 999999;
         }
 """
-    if default_style in contents:
-        contents = contents.replace(default_style, custom_style, 1)
-    elif "#transfer .spinner" in contents and "#transfer, #infobox" not in contents:
-        contents = contents.replace(
-            "        #transfer {\n",
-            "        #transfer, #infobox {\n            display: none !important;\n        }\n\n        #transfer {\n",
-            1,
-        )
-
-    if "background-color:powderblue;" in contents:
-        contents = contents.replace(
-            """        body {
+    contents = contents.replace(default_loader_style, themed_loader_style)
+    contents = contents.replace(
+        """        body {
             font-family: arial;
             margin: 0;
             padding: none;
             background-color:powderblue;
         }
 """,
-            """        body {
+        """        body {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
             background-color: #faf8ef;
         }
 """,
-            1,
-        )
-    elif "#transfer, #infobox" not in contents and "body {" in contents:
-        contents = contents.replace(
-            "        body {\n",
-            "        #transfer, #infobox {\n            display: none !important;\n        }\n\n        body {\n",
-            1,
-        )
-
-    default_transfer = """    <div id="transfer" align=center>
-<!--        <div class="spinner" id='spinner'></div> -->
-        <div class="emscripten" id="status">Downloading...</div>
-        <div class="emscripten">
-            <progress value="0" max="100" id="progress"></progress>
-        </div>
-    </div>
-"""
-    custom_transfer = """    <div id="transfer" align=center>
-        <div class="loading-title">3D 2048</div>
-        <div class="spinner" aria-hidden="true"></div>
-        <div class="emscripten" id="status">Downloading...</div>
-        <div class="emscripten">
-            <progress value="0" max="100" id="progress"></progress>
-        </div>
-    </div>
-"""
-    if default_transfer in contents:
-        contents = contents.replace(default_transfer, custom_transfer, 1)
-
-    contents = contents.replace(f'"{HIDDEN_BUNDLE_NAME}.apk"', f'"{PUBLIC_BUNDLE_NAME}.apk"')
-    contents = contents.replace(f'"{HIDDEN_BUNDLE_NAME}.tar.gz"', f'"{PUBLIC_BUNDLE_NAME}.tar.gz"')
+    )
+    contents = contents.replace(
+        "<!--        <div class=\"spinner\" id='spinner'></div> -->",
+        '        <div class="spinner" aria-hidden="true"></div>',
+    )
 
     index_path.write_text(contents, encoding="utf-8")
 
