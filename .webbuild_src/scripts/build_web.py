@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -43,52 +44,46 @@ def replace_once(contents: str, old: str, new: str) -> str:
 def customize_web_loader(index_path: Path) -> None:
     contents = index_path.read_text(encoding="utf-8")
 
-    replacements = [
-        (
-            """    platform.document.body.style.background = "#7f7f7f"
-""",
-            """    platform.document.body.style.background = "#faf8ef"
-""",
-        ),
-        (
-            """    platform.window.transfer.hidden = true
-""",
-            """    platform.window.transfer.hidden = false
-""",
-        ),
-        (
-            """        platform.window.infobox.innerText = msg
-""",
-            """        platform.window.infobox.innerText = msg
-        platform.window.show_infobox()
-""",
-        ),
-        (
-            """        platform.window.infobox.innerText = f"installing {pkg}"
-""",
-            """        platform.window.infobox.innerText = f"installing {pkg}"
-        platform.window.show_infobox()
-""",
-        ),
-        (
-            """    await shell.source(main, callback=ui_callback)
+    if 'platform.document.body.style.background = "#7f7f7f"' in contents:
+        contents = contents.replace(
+            'platform.document.body.style.background = "#7f7f7f"',
+            'platform.document.body.style.background = "#faf8ef"',
+            1,
+        )
 
-    # if you don't reach that step
-    # your main.py has an infinite sync loop somewhere !
+    if "platform.window.transfer.hidden = true" in contents:
+        contents = contents.replace(
+            "platform.window.transfer.hidden = true",
+            "platform.window.transfer.hidden = false",
+            1,
+        )
 
-    platform.window.infobox.style.display = "none"
-""",
-            """    await shell.source(main, callback=ui_callback)
+    contents = re.sub(
+        r"""[ \t]*# TODO: test for window\.webkitAudioContext.*?await asyncio\.sleep\(\.1\)\n\n""",
+        "",
+        contents,
+        count=1,
+        flags=re.DOTALL,
+    )
 
-    # if you don't reach that step
-    # your main.py has an infinite sync loop somewhere !
+    if 'platform.window.infobox.innerText = f"installing {pkg}"' in contents and "platform.window.show_infobox()" not in contents:
+        contents = contents.replace(
+            '        platform.window.infobox.innerText = f"installing {pkg}"\n',
+            '        platform.window.infobox.innerText = f"installing {pkg}"\n        platform.window.show_infobox()\n',
+            1,
+        )
 
-    platform.window.transfer.hidden = true
-    platform.window.infobox.style.display = "none"
-""",
-        ),
-        (
-            """function show_infobox() {
+    if "platform.window.transfer.hidden = true\n    platform.window.infobox.style.display = \"none\"" not in contents:
+        contents = contents.replace(
+            '    platform.window.infobox.style.display = "none"\n',
+            '    platform.window.transfer.hidden = true\n    platform.window.infobox.style.display = "none"\n',
+            1,
+        )
+
+    if "ume_block : 1" in contents:
+        contents = contents.replace("ume_block : 1", "ume_block : 0", 1)
+
+    show_infobox_default = """function show_infobox() {
     infobox.style.display = "block";
 
     // Measure box
@@ -102,8 +97,8 @@ def customize_web_loader(index_path: Path) -> None:
     infobox.style.left = left + "px";
     infobox.style.top = top + "px";
 }
-""",
-            f"""function show_infobox() {{
+"""
+    show_infobox_custom = f"""function show_infobox() {{
     const message = infobox.innerText.trim();
     if (!message || message === "{DEFAULT_INFOBOX_TEXT}") {{
         infobox.style.display = "none";
@@ -123,10 +118,11 @@ def customize_web_loader(index_path: Path) -> None:
     infobox.style.left = left + "px";
     infobox.style.top = top + "px";
 }}
-""",
-        ),
-        (
-            """        #status {
+"""
+    if show_infobox_default in contents:
+        contents = contents.replace(show_infobox_default, show_infobox_custom, 1)
+
+    default_style = """        #status {
             display: inline-block;
             vertical-align: top;
             margin-top: 20px;
@@ -149,8 +145,8 @@ def customize_web_loader(index_path: Path) -> None:
  /*           display: none; */
             z-index: 999999;
         }
-""",
-            """        #transfer {
+"""
+    custom_style = """        #transfer {
             position: fixed;
             inset: 0;
             display: flex;
@@ -209,9 +205,12 @@ def customize_web_loader(index_path: Path) -> None:
             z-index: 21;
             display: none;
         }
-""",
-        ),
-        (
+"""
+    if default_style in contents:
+        contents = contents.replace(default_style, custom_style, 1)
+
+    if "background-color:powderblue;" in contents:
+        contents = contents.replace(
             """        body {
             font-family: arial;
             margin: 0;
@@ -226,17 +225,18 @@ def customize_web_loader(index_path: Path) -> None:
             background-color: #faf8ef;
         }
 """,
-        ),
-        (
-            """    <div id="transfer" align=center>
+            1,
+        )
+
+    default_transfer = """    <div id="transfer" align=center>
 <!--        <div class="spinner" id='spinner'></div> -->
         <div class="emscripten" id="status">Downloading...</div>
         <div class="emscripten">
             <progress value="0" max="100" id="progress"></progress>
         </div>
     </div>
-""",
-            """    <div id="transfer" align=center>
+"""
+    custom_transfer = """    <div id="transfer" align=center>
         <div class="loading-title">3D 2048</div>
         <div class="spinner" aria-hidden="true"></div>
         <div class="emscripten" id="status">Downloading...</div>
@@ -244,12 +244,9 @@ def customize_web_loader(index_path: Path) -> None:
             <progress value="0" max="100" id="progress"></progress>
         </div>
     </div>
-""",
-        ),
-    ]
-
-    for old, new in replacements:
-        contents = replace_once(contents, old, new)
+"""
+    if default_transfer in contents:
+        contents = contents.replace(default_transfer, custom_transfer, 1)
 
     index_path.write_text(contents, encoding="utf-8")
 
