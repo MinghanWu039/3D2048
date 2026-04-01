@@ -174,12 +174,17 @@ GRID_WIDTH = GRID_HEIGHT = GRID_SIZE * TILE_SIZE + (GRID_SIZE + 1) * GRID_MARGIN
 VIEW_WIDTH = 400
 VIEW_HEIGHT = 400
 CUBE_SIZE = 40
+LAYER_CENTER_SPACING = 3.5
+ROTATION_SPEED = 0.01
+MAX_VERTICAL_ANGLE = math.radians(30)
+INITIAL_HORIZONTAL_ANGLE = math.radians(-35)
+INITIAL_VERTICAL_ANGLE = math.radians(20)
 
 # Colors
 BG_COLOR = (187, 173, 160)
 GRID_BG_COLOR = (205, 193, 180)
 TILE_COLORS = {
-    0: (205, 193, 180),
+    0: (218, 209, 199),
     2: (238, 228, 218),
     4: (237, 224, 200),
     8: (242, 177, 121),
@@ -194,6 +199,12 @@ TILE_COLORS = {
 }
 TEXT_COLOR_DARK = (119, 110, 101)
 TEXT_COLOR_LIGHT = (249, 246, 242)
+POPUP_BG_COLOR = (250, 248, 239)
+POPUP_BORDER_COLOR = (187, 173, 160)
+BUTTON_BG_COLOR = (143, 122, 102)
+BUTTON_HOVER_COLOR = (159, 138, 118)
+STRIPE_COLOR_DARK = (119, 110, 101)
+STRIPE_COLOR_LIGHT = (249, 246, 242)
 
 class GameUI:
     def __init__(self):
@@ -203,33 +214,71 @@ class GameUI:
         self.score_font = pygame.font.Font(None, 36)
         self.tile_font = pygame.font.Font(None, 55)
         self.game_over_font = pygame.font.Font(None, 72)
+        self.popup_font = pygame.font.Font(None, 40)
+        self.button_font = pygame.font.Font(None, 34)
         self.key_map_font = pygame.font.Font(None, 24)
-        self.game = Game3D2048()
-
-        # 3D view attributes
-        self.angle_x = 0
-        self.angle_y = 0
+        self.angle_x = INITIAL_VERTICAL_ANGLE
+        self.angle_y = INITIAL_HORIZONTAL_ANGLE
         self.zoom = 8
         self.mouse_dragging = False
         self.last_mouse_pos = (0, 0)
         self.running = True
         self.game_over = False
+        self.try_again_button = pygame.Rect(0, 0, 180, 52)
+        self.game = None
+        self.restart_game()
 
-    def draw_grid(self, surface, grid_data, start_x, start_y):
+    def restart_game(self):
+        self.game = Game3D2048()
+        self.game_over = self.game.game_over()
+        self.angle_x = INITIAL_VERTICAL_ANGLE
+        self.angle_y = INITIAL_HORIZONTAL_ANGLE
+        self.mouse_dragging = False
+        self.last_mouse_pos = (0, 0)
+
+    def draw_grid(self, surface, grid_data, start_x, start_y, layer_index):
         pygame.draw.rect(surface, GRID_BG_COLOR, (start_x, start_y, GRID_WIDTH, GRID_HEIGHT))
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
                 tile_value = grid_data[r][c]
-                self.draw_tile(surface, tile_value, r, c, start_x, start_y)
+                striped = self.can_merge_front_back_at(r, c, layer_index)
+                self.draw_tile(surface, tile_value, r, c, start_x, start_y, striped=striped)
 
-    def draw_tile(self, surface, value, row, col, start_x, start_y):
+    def can_merge_front_back_at(self, x, y, z):
+        value = self.game.grid[x][y][z]
+        if value == 0:
+            return False
+
+        if z > 0 and self.game.grid[x][y][z - 1] == value:
+            return True
+        if z + 1 < self.game.size_z and self.game.grid[x][y][z + 1] == value:
+            return True
+        return False
+
+    def draw_tile_stripes(self, surface, tile_rect, stripe_color):
+        stripe_spacing = 20
+        previous_clip = surface.get_clip()
+        surface.set_clip(tile_rect)
+
+        for offset in range(-tile_rect.height, tile_rect.width, stripe_spacing):
+            start_pos = (tile_rect.x + offset, tile_rect.bottom)
+            end_pos = (tile_rect.x + offset + tile_rect.height, tile_rect.y)
+            pygame.draw.line(surface, stripe_color, start_pos, end_pos, 2)
+
+        surface.set_clip(previous_clip)
+
+    def draw_tile(self, surface, value, row, col, start_x, start_y, striped=False):
         x = start_x + GRID_MARGIN * (col + 1) + TILE_SIZE * col
         y = start_y + GRID_MARGIN * (row + 1) + TILE_SIZE * row
         color = TILE_COLORS.get(value, TILE_COLORS[2048])
-        pygame.draw.rect(surface, color, (x, y, TILE_SIZE, TILE_SIZE))
+        tile_rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
+        pygame.draw.rect(surface, color, tile_rect)
 
         if value != 0:
             text_color = TEXT_COLOR_DARK if value in [2, 4] else TEXT_COLOR_LIGHT
+            if striped:
+                stripe_color = STRIPE_COLOR_DARK if text_color == TEXT_COLOR_DARK else STRIPE_COLOR_LIGHT
+                self.draw_tile_stripes(surface, tile_rect, stripe_color)
             text = self.tile_font.render(str(value), True, text_color)
             text_rect = text.get_rect(center=(x + TILE_SIZE / 2, y + TILE_SIZE / 2))
             surface.blit(text, text_rect)
@@ -265,12 +314,19 @@ class GameUI:
                    start_pos[1] + (dy * (i * (dash_length + gap_length) + dash_length)) / distance)
             pygame.draw.line(surface, color, start, end, 1)
 
+    def get_layer_center_z(self, layer_index):
+        return (layer_index - (self.game.size_z - 1) / 2) * LAYER_CENTER_SPACING
+
     def draw_grid_frame(self, surface):
         grid_line_color = (255, 255, 255)  # White for grid lines
         
-        x_planes = [i - self.game.size_x / 2 - 0.5 for i in range(self.game.size_x + 1)]
-        y_planes = [i - self.game.size_y / 2 - 0.5 for i in range(self.game.size_y + 1)]
-        z_planes = [-1.5, -0.5, 0.5, 1.5] # Hardcoded for 2 layers with separation
+        x_planes = [i - self.game.size_y / 2 - 0.5 for i in range(self.game.size_y + 1)]
+        y_planes = [i - self.game.size_x / 2 - 0.5 for i in range(self.game.size_x + 1)]
+        layer_planes = [
+            (self.get_layer_center_z(layer_index) - 0.5, self.get_layer_center_z(layer_index) + 0.5)
+            for layer_index in range(self.game.size_z)
+        ]
+        z_planes = [z for planes in layer_planes for z in planes]
 
         # Lines along X
         for y in y_planes:
@@ -289,15 +345,20 @@ class GameUI:
         # Lines along Z
         for x in x_planes:
             for y in y_planes:
-                self.draw_dotted_line(surface, grid_line_color, self.project_3d_to_2d(x, y, z_planes[0]), self.project_3d_to_2d(x, y, z_planes[1]))
-                self.draw_dotted_line(surface, grid_line_color, self.project_3d_to_2d(x, y, z_planes[2]), self.project_3d_to_2d(x, y, z_planes[3]))
+                for z_start, z_end in layer_planes:
+                    self.draw_dotted_line(
+                        surface,
+                        grid_line_color,
+                        self.project_3d_to_2d(x, y, z_start),
+                        self.project_3d_to_2d(x, y, z_end),
+                    )
 
     def draw_key_mappings(self, surface):
         key_mappings = [
             "Controls:",
             "- Arrows / WASD: Move on plane",
             "- Q / E: Move between planes (Front/Back)",
-            "- Mouse Drag: Rotate 3D view (Horizontally)"
+            "- Mouse Drag: Rotate 3D view"
         ]
         y_offset = 420
         for line in key_mappings:
@@ -307,10 +368,11 @@ class GameUI:
 
     def get_cube_faces(self, x, y, z, value):
         # This function calculates and returns the faces of a single cube
-        x -= self.game.size_x / 2
-        y -= self.game.size_y / 2
-        z_offset = 1.0 if z > 0 else 0
-        z_centered = z - self.game.size_z / 2 + z_offset
+        row = x
+        col = y
+        x = col - self.game.size_y / 2
+        y = row - self.game.size_x / 2
+        z_centered = self.get_layer_center_z(z)
 
         vertices = [
             (x - 0.5, y - 0.5, z_centered - 0.5), (x + 0.5, y - 0.5, z_centered - 0.5),
@@ -329,14 +391,17 @@ class GameUI:
         dark_color = tuple(max(0, c - 50) for c in base_color)
         light_color = tuple(min(255, c + 30) for c in base_color)
 
-        faces_indices = [
-            (0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4),
-            (2, 3, 7, 6), (0, 3, 7, 4), (1, 2, 6, 5)
+        face_definitions = [
+            ((0, 1, 2, 3), base_color),
+            ((4, 5, 6, 7), dark_color),
+            ((0, 1, 5, 4), light_color),
+            ((2, 3, 7, 6), dark_color),
+            ((0, 3, 7, 4), dark_color),
+            ((1, 2, 6, 5), base_color),
         ]
-        face_colors = [base_color, dark_color, light_color, dark_color, dark_color, base_color]
 
         cube_faces = []
-        for i, face in enumerate(faces_indices):
+        for face, color in face_definitions:
             avg_z = sum(rotated_vertices[j][2] for j in face) / 4
             projected_points = []
             for j in face:
@@ -345,7 +410,7 @@ class GameUI:
                 px = vx * factor * CUBE_SIZE + VIEW_WIDTH / 2
                 py = vy * factor * CUBE_SIZE + VIEW_HEIGHT / 2
                 projected_points.append((px, py))
-            cube_faces.append((projected_points, face_colors[i], avg_z))
+            cube_faces.append((projected_points, color, avg_z))
         return cube_faces
 
     def draw_3d_grid(self, surface, start_x, start_y):
@@ -362,8 +427,8 @@ class GameUI:
                     if value != 0:
                         all_faces.extend(self.get_cube_faces(x, y, z, value))
 
-        # Sort all faces from all cubes by depth (painter's algorithm)
-        all_faces.sort(key=lambda f: f[2], reverse=False)
+        # Draw farthest faces first so nearer cubes occlude them.
+        all_faces.sort(key=lambda f: f[2], reverse=True)
 
         for points, color, _ in all_faces:
             pygame.draw.polygon(view_surface, color, points)
@@ -375,6 +440,11 @@ class GameUI:
             self.running = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
+                if self.game_over and self.try_again_button.collidepoint(event.pos):
+                    self.restart_game()
+                    return
+                if self.game_over:
+                    return
                 self.mouse_dragging = True
                 self.last_mouse_pos = event.pos
         elif event.type == pygame.MOUSEBUTTONUP:
@@ -382,8 +452,11 @@ class GameUI:
                 self.mouse_dragging = False
         elif event.type == pygame.MOUSEMOTION:
             if self.mouse_dragging:
-                dx, _ = event.pos[0] - self.last_mouse_pos[0], event.pos[1] - self.last_mouse_pos[1]
-                self.angle_y += dx * 0.01
+                dx = event.pos[0] - self.last_mouse_pos[0]
+                dy = event.pos[1] - self.last_mouse_pos[1]
+                self.angle_y += dx * ROTATION_SPEED
+                self.angle_x -= dy * ROTATION_SPEED
+                self.angle_x = max(-MAX_VERTICAL_ANGLE, min(MAX_VERTICAL_ANGLE, self.angle_x))
                 self.last_mouse_pos = event.pos
 
         if event.type == pygame.KEYDOWN and not self.game_over:
@@ -403,8 +476,38 @@ class GameUI:
 
             if moved:
                 self.game.add_random_tile()
-                if self.game.game_over():
-                    self.game_over = True
+            self.game_over = self.game.game_over()
+
+    def _draw_game_over_popup(self):
+        popup_width = 320
+        popup_height = 220
+        popup_rect = pygame.Rect(
+            (SCREEN_WIDTH - popup_width) // 2,
+            (SCREEN_HEIGHT - popup_height) // 2,
+            popup_width,
+            popup_height,
+        )
+
+        pygame.draw.rect(self.screen, POPUP_BG_COLOR, popup_rect, border_radius=18)
+        pygame.draw.rect(self.screen, POPUP_BORDER_COLOR, popup_rect, 3, border_radius=18)
+
+        title_text = self.game_over_font.render("Game Over!", True, TEXT_COLOR_DARK)
+        title_rect = title_text.get_rect(center=(popup_rect.centerx, popup_rect.y + 56))
+        self.screen.blit(title_text, title_rect)
+
+        score_text = self.popup_font.render(f"Score: {self.game.score}", True, TEXT_COLOR_DARK)
+        score_rect = score_text.get_rect(center=(popup_rect.centerx, popup_rect.y + 112))
+        self.screen.blit(score_text, score_rect)
+
+        self.try_again_button = pygame.Rect(0, 0, 180, 52)
+        self.try_again_button.center = (popup_rect.centerx, popup_rect.y + 170)
+        is_hovered = self.try_again_button.collidepoint(pygame.mouse.get_pos())
+        button_color = BUTTON_HOVER_COLOR if is_hovered else BUTTON_BG_COLOR
+
+        pygame.draw.rect(self.screen, button_color, self.try_again_button, border_radius=12)
+        button_text = self.button_font.render("Try again", True, TEXT_COLOR_LIGHT)
+        button_rect = button_text.get_rect(center=self.try_again_button.center)
+        self.screen.blit(button_text, button_rect)
 
     def _draw_frame(self):
         self.screen.fill(BG_COLOR)
@@ -414,8 +517,8 @@ class GameUI:
         self.screen.blit(score_text, score_rect)
 
         grid_y_pos = 100
-        self.draw_grid(self.screen, [[self.game.grid[r][c][0] for c in range(self.game.size_y)] for r in range(self.game.size_x)], GRID_MARGIN, grid_y_pos)
-        self.draw_grid(self.screen, [[self.game.grid[r][c][1] for c in range(self.game.size_y)] for r in range(self.game.size_x)], GRID_WIDTH + GRID_MARGIN * 2, grid_y_pos)
+        self.draw_grid(self.screen, [[self.game.grid[r][c][0] for c in range(self.game.size_y)] for r in range(self.game.size_x)], GRID_MARGIN, grid_y_pos, 0)
+        self.draw_grid(self.screen, [[self.game.grid[r][c][1] for c in range(self.game.size_y)] for r in range(self.game.size_x)], GRID_WIDTH + GRID_MARGIN * 2, grid_y_pos, 1)
 
         self.draw_3d_grid(self.screen, GRID_WIDTH * 2 + GRID_MARGIN * 3, (SCREEN_HEIGHT - VIEW_HEIGHT) // 2)
         self.draw_key_mappings(self.screen)
@@ -424,9 +527,7 @@ class GameUI:
             overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
             overlay.fill((238, 228, 218, 128))
             self.screen.blit(overlay, (0, 0))
-            game_over_text = self.game_over_font.render("Game Over!", True, TEXT_COLOR_DARK)
-            game_over_rect = game_over_text.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2))
-            self.screen.blit(game_over_text, game_over_rect)
+            self._draw_game_over_popup()
 
         pygame.display.flip()
 
@@ -459,5 +560,3 @@ if __name__ == "__main__":
         asyncio.run(ui.run_web())
     else:
         ui.run()
-
-

@@ -23,9 +23,9 @@ from pathlib import Path
 # do not rename
 async def custom_site():
     import embed
-    platform.document.body.style.background = "#7f7f7f"
+    platform.document.body.style.background = "#faf8ef"
 
-    platform.window.transfer.hidden = true
+    platform.window.transfer.hidden = false
     platform.window.canvas.style.visibility = "visible"
 
 
@@ -72,6 +72,7 @@ async def custom_site():
         # now make a prompt
         msg  = "Ready to start ! Please click/touch page"
         platform.window.infobox.innerText = msg
+        platform.window.show_infobox()
         print("\n"*4, f"    * Waiting for media user engagement. {msg} *" , "\n"*4)
 
         while not platform.window.MM.UME:
@@ -87,12 +88,14 @@ async def custom_site():
 
     def ui_callback(pkg):
         platform.window.infobox.innerText = f"installing {pkg}"
+        platform.window.show_infobox()
 
     await shell.source(main, callback=ui_callback)
 
     # if you don't reach that step
     # your main.py has an infinite sync loop somewhere !
 
+    platform.window.transfer.hidden = true
     platform.window.infobox.style.display = "none"
     platform.window.config.gui_divider = 1
     platform.window.window_resize()
@@ -162,6 +165,12 @@ config = {
 }
 
 function show_infobox() {
+    const message = infobox.innerText.trim();
+    if (!message || message === "Loading, please wait ...") {
+        infobox.style.display = "none";
+        return;
+    }
+
     infobox.style.display = "block";
 
     // Measure box
@@ -190,28 +199,64 @@ function show_infobox() {
     <link rel="icon" type="image/png" href="favicon.png" sizes="16x16">
 
     <style>
+        #transfer {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            align-items: center;
+            justify-content: center;
+            background: #faf8ef;
+            z-index: 20;
+        }
+
+        #transfer .loading-title {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: #776e65;
+        }
+
+        #transfer .spinner {
+            width: 72px;
+            height: 72px;
+            border: 7px solid rgba(119, 110, 101, 0.18);
+            border-top-color: #776e65;
+            border-radius: 50%;
+            animation: spinner-rotate 0.8s linear infinite;
+        }
+
+        @keyframes spinner-rotate {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
         #status {
-            display: inline-block;
-            vertical-align: top;
-            margin-top: 20px;
-            margin-left: 30px;
-            font-weight: bold;
-            color: rgb(120, 120, 120);
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
 
         #progress {
-            height: 20px;
-            width: 300px;
+            display: none;
         }
 
         #infobox {
-            position: fixed; /* center relative to viewport */
-            background: green;
-            color: blue;
-            font-weight: bold;
-            padding: 12px 24px;
- /*           display: none; */
-            z-index: 999999;
+            position: fixed;
+            background: transparent;
+            color: #776e65;
+            font-weight: 600;
+            padding: 0;
+            z-index: 21;
+            display: none;
         }
         div.emscripten { text-align: center; }
         div.emscripten_border { border: 1px solid black; }
@@ -237,10 +282,10 @@ function show_infobox() {
         }
 
         body {
-            font-family: arial;
+            font-family: Arial, sans-serif;
             margin: 0;
-            padding: none;
-            background-color:powderblue;
+            padding: 0;
+            background-color: #faf8ef;
         }
 
         .topright{
@@ -291,7 +336,8 @@ function show_infobox() {
 <body>
 
     <div id="transfer" align=center>
-<!--        <div class="spinner" id='spinner'></div> -->
+        <div class="loading-title">3D 2048</div>
+        <div class="spinner" aria-hidden="true"></div>
         <div class="emscripten" id="status">Downloading...</div>
         <div class="emscripten">
             <progress value="0" max="100" id="progress"></progress>
