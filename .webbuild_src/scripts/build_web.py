@@ -44,6 +44,9 @@ def replace_once(contents: str, old: str, new: str) -> str:
 def customize_web_loader(index_path: Path) -> None:
     contents = index_path.read_text(encoding="utf-8")
 
+    if " type=module id=\"site\" " in contents and " async defer" in contents:
+        contents = contents.replace(" async defer", "", 1)
+
     if 'platform.document.body.style.background = "#7f7f7f"' in contents:
         contents = contents.replace(
             'platform.document.body.style.background = "#7f7f7f"',
