@@ -44,8 +44,21 @@ def replace_once(contents: str, old: str, new: str) -> str:
 def customize_web_loader(index_path: Path) -> None:
     contents = index_path.read_text(encoding="utf-8")
 
-    if " type=module id=\"site\" " in contents and " async defer" in contents:
-        contents = contents.replace(" async defer", "", 1)
+    bootstrap_src = '<script src="https://pygame-web.github.io/cdn/0.9.3/pythons.js" type=module id="site" data-python="python3.12" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui" async defer>'
+    bootstrap_src_no_async = '<script src="https://pygame-web.github.io/cdn/0.9.3/pythons.js" type=module id="site" data-python="python3.12" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui">'
+    browserfs_script = '<script src="https://pygame-web.github.io/cdn/0.9.3//browserfs.min.js"></script>'
+    bootstrap_with_browserfs = browserfs_script + bootstrap_src_no_async
+
+    if bootstrap_src in contents:
+        contents = contents.replace(bootstrap_src, bootstrap_with_browserfs, 1)
+    elif bootstrap_src_no_async in contents and browserfs_script not in contents.split(bootstrap_src_no_async, 1)[0]:
+        contents = contents.replace(bootstrap_src_no_async, bootstrap_with_browserfs, 1)
+
+    if browserfs_script in contents:
+        first_browserfs_index = contents.find(browserfs_script)
+        second_browserfs_index = contents.find(browserfs_script, first_browserfs_index + len(browserfs_script))
+        if second_browserfs_index != -1:
+            contents = contents[:second_browserfs_index] + contents[second_browserfs_index + len(browserfs_script):]
 
     if 'platform.document.body.style.background = "#7f7f7f"' in contents:
         contents = contents.replace(
