@@ -8,7 +8,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STAGE_DIR = ROOT / ".webbuild_src"
-DEFAULT_INFOBOX_TEXT = "Loading, please wait ..."
 
 EXCLUDE_DIRS = {
     ".venv",
@@ -67,10 +66,10 @@ def customize_web_loader(index_path: Path) -> None:
             1,
         )
 
-    if "platform.window.transfer.hidden = true" in contents:
+    if "platform.window.transfer.hidden = false" in contents:
         contents = contents.replace(
-            "platform.window.transfer.hidden = true",
             "platform.window.transfer.hidden = false",
+            "platform.window.transfer.hidden = true",
             1,
         )
 
@@ -82,12 +81,7 @@ def customize_web_loader(index_path: Path) -> None:
         flags=re.DOTALL,
     )
 
-    if 'platform.window.infobox.innerText = f"installing {pkg}"' in contents and "platform.window.show_infobox()" not in contents:
-        contents = contents.replace(
-            '        platform.window.infobox.innerText = f"installing {pkg}"\n',
-            '        platform.window.infobox.innerText = f"installing {pkg}"\n        platform.window.show_infobox()\n',
-            1,
-        )
+    contents = contents.replace("        platform.window.show_infobox()\n", "")
 
     if "platform.window.transfer.hidden = true\n    platform.window.infobox.style.display = \"none\"" not in contents:
         contents = contents.replace(
@@ -114,29 +108,20 @@ def customize_web_loader(index_path: Path) -> None:
     infobox.style.top = top + "px";
 }
 """
-    show_infobox_custom = f"""function show_infobox() {{
-    const message = infobox.innerText.trim();
-    if (!message || message === "{DEFAULT_INFOBOX_TEXT}") {{
-        infobox.style.display = "none";
-        return;
-    }}
-
-    infobox.style.display = "block";
-
-    // Measure box
-    const w = infobox.offsetWidth;
-    const h = infobox.offsetHeight;
-
-    // Center in viewport
-    const left = (window.innerWidth - w) / 2;
-    const top = (window.innerHeight - h) / 2;
-
-    infobox.style.left = left + "px";
-    infobox.style.top = top + "px";
-}}
+    show_infobox_custom = """function show_infobox() {
+    infobox.style.display = "none";
+}
 """
     if show_infobox_default in contents:
         contents = contents.replace(show_infobox_default, show_infobox_custom, 1)
+    elif "function show_infobox() {" in contents:
+        contents = re.sub(
+            r"""function show_infobox\(\) \{.*?\n\}\n""",
+            show_infobox_custom,
+            contents,
+            count=1,
+            flags=re.DOTALL,
+        )
 
     default_style = """        #status {
             display: inline-block;
@@ -224,6 +209,12 @@ def customize_web_loader(index_path: Path) -> None:
 """
     if default_style in contents:
         contents = contents.replace(default_style, custom_style, 1)
+    elif "#transfer .spinner" in contents and "#transfer, #infobox" not in contents:
+        contents = contents.replace(
+            "        #transfer {\n",
+            "        #transfer, #infobox {\n            display: none !important;\n        }\n\n        #transfer {\n",
+            1,
+        )
 
     if "background-color:powderblue;" in contents:
         contents = contents.replace(
@@ -241,6 +232,12 @@ def customize_web_loader(index_path: Path) -> None:
             background-color: #faf8ef;
         }
 """,
+            1,
+        )
+    elif "#transfer, #infobox" not in contents and "body {" in contents:
+        contents = contents.replace(
+            "        body {\n",
+            "        #transfer, #infobox {\n            display: none !important;\n        }\n\n        body {\n",
             1,
         )
 

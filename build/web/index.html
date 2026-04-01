@@ -25,7 +25,7 @@ async def custom_site():
     import embed
     platform.document.body.style.background = "#faf8ef"
 
-    platform.window.transfer.hidden = false
+    platform.window.transfer.hidden = true
     platform.window.canvas.style.visibility = "visible"
 
 
@@ -69,7 +69,6 @@ async def custom_site():
 
     def ui_callback(pkg):
         platform.window.infobox.innerText = f"installing {pkg}"
-        platform.window.show_infobox()
 
     await shell.source(main, callback=ui_callback)
 
@@ -146,24 +145,7 @@ config = {
 }
 
 function show_infobox() {
-    const message = infobox.innerText.trim();
-    if (!message || message === "Loading, please wait ...") {
-        infobox.style.display = "none";
-        return;
-    }
-
-    infobox.style.display = "block";
-
-    // Measure box
-    const w = infobox.offsetWidth;
-    const h = infobox.offsetHeight;
-
-    // Center in viewport
-    const left = (window.innerWidth - w) / 2;
-    const top = (window.innerHeight - h) / 2;
-
-    infobox.style.left = left + "px";
-    infobox.style.top = top + "px";
+    infobox.style.display = "none";
 }
 
 </script>
