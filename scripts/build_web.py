@@ -87,6 +87,37 @@ def customize_web_loader(index_path: Path) -> None:
         '    platform.window.transfer.style.display = "none"\n'
         '    platform.window.infobox.style.display = "none"\n',
     )
+    contents = contents.replace('        show_infobox()\n', "")
+    contents = contents.replace(
+        """function show_infobox() {
+    infobox.style.display = "block";
+
+    // Measure box
+    const h = infobox.offsetHeight;
+
+    // Center in viewport
+    const top = Math.max(24, window.innerHeight * 0.18 - h / 2);
+
+    infobox.style.left = "50%";
+    infobox.style.transform = "translateX(-50%)";
+    infobox.style.top = top + "px";
+}
+""",
+        """function show_infobox() {
+    infobox.style.display = "block";
+
+    // Measure box
+    const h = infobox.offsetHeight;
+
+    // Place near the upper center of the viewport
+    const top = Math.max(24, window.innerHeight * 0.18 - h / 2);
+
+    infobox.style.left = "50%";
+    infobox.style.transform = "translateX(-50%)";
+    infobox.style.top = top + "px";
+}
+""",
+    )
 
     default_loader_style = """        #status {
             display: inline-block;
@@ -198,6 +229,7 @@ def customize_web_loader(index_path: Path) -> None:
             border-radius: 18px;
             padding: 16px 28px;
             box-shadow: 0 16px 40px rgba(119, 110, 101, 0.18);
+            max-width: min(80vw, 520px);
             z-index: 999999;
         }
 """

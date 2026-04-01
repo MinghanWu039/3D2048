@@ -278,6 +278,7 @@ function show_infobox() {
             border-radius: 18px;
             padding: 16px 28px;
             box-shadow: 0 16px 40px rgba(119, 110, 101, 0.18);
+            max-width: min(80vw, 520px);
             z-index: 999999;
         }
         div.emscripten { text-align: center; }
@@ -455,7 +456,6 @@ frameborder="1"
         info.hidden = debug_hidden
         box.hidden =  debug_hidden
 
-        show_infobox()
     }
 
     function custom_prerun(){
