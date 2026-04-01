@@ -8,6 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STAGE_DIR = ROOT / ".webbuild_src"
+HIDDEN_BUNDLE_NAME = ".webbuild_src"
+PUBLIC_BUNDLE_NAME = "webbuild_src"
 
 EXCLUDE_DIRS = {
     ".venv",
@@ -261,7 +263,22 @@ def customize_web_loader(index_path: Path) -> None:
     if default_transfer in contents:
         contents = contents.replace(default_transfer, custom_transfer, 1)
 
+    contents = contents.replace(f'"{HIDDEN_BUNDLE_NAME}.apk"', f'"{PUBLIC_BUNDLE_NAME}.apk"')
+    contents = contents.replace(f'"{HIDDEN_BUNDLE_NAME}.tar.gz"', f'"{PUBLIC_BUNDLE_NAME}.tar.gz"')
+
     index_path.write_text(contents, encoding="utf-8")
+
+
+def rename_public_web_archives(web_dir: Path) -> None:
+    hidden_apk = web_dir / f"{HIDDEN_BUNDLE_NAME}.apk"
+    hidden_tar = web_dir / f"{HIDDEN_BUNDLE_NAME}.tar.gz"
+    public_apk = web_dir / f"{PUBLIC_BUNDLE_NAME}.apk"
+    public_tar = web_dir / f"{PUBLIC_BUNDLE_NAME}.tar.gz"
+
+    if hidden_apk.exists():
+        hidden_apk.replace(public_apk)
+    if hidden_tar.exists():
+        hidden_tar.replace(public_tar)
 
 
 def main() -> int:
@@ -282,6 +299,7 @@ def main() -> int:
         shutil.rmtree(target_web)
     target_web.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(staged_web, target_web)
+    rename_public_web_archives(target_web)
     customize_web_loader(target_web / "index.html")
 
     return 0
